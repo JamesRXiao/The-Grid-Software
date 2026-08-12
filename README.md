@@ -8,11 +8,13 @@ then run the exact same code on the real hardware.
 A layout of the floor can be found here: [Google Sheets](https://docs.google.com/spreadsheets/d/1Plh8lO02KhHBDETudAaVY9BvlBedDt_4V1slBKskpGw/edit?usp=sharing)
 
 Project led by James Xiao, Vivian Ang, Xinlan Tanner
+
 MIT '29
 
 ## Notes (!)
 - Pygame is unable to be installed with pip on the latest version (3.14) of Python. Use `pip install pygame-ce` instead.
 - Due to frame protocol reasons, each color value command (R, G, B), can be from 0-254 instead of 0-255. Bright white would be (254, 254, 254).
+- Pls refrain from making the entire dance floor full bright white. While our system is designed to safely handle more than that load, we don't want to overload our power supplies and heat up our boards :(
 
 ## Quick start
 
