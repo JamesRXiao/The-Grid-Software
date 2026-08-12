@@ -1,0 +1,17 @@
+# Local machine config (copy config.example.py -> config.py)
+config.py
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Media dropped into examples for local testing
+examples/*.mp4
+examples/*.mov
+
+# OS cruft
+.DS_Store
+Thumbs.db

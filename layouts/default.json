@@ -1,0 +1,25 @@
+{
+  "name": "default-7x28",
+  "description": "The standard Grid: 7 rows tall, 28 columns wide (landscape). 49 modules, each a horizontal 1x4 strip of pixels. Modules are wired in a vertical serpentine (snake): IDs run top-to-bottom down the first column of modules, then the next column runs bottom-to-top, and so on.",
+
+  "rows": 7,
+  "cols": 28,
+
+  "pixels_per_module": 4,
+
+  "_comment_module_grid": "The floor is made of modules arranged in a grid. Each module spans 1 row and `pixels_per_module` columns. So a 7x28 pixel floor is a 7-row x 7-column grid of modules (7 * 7 = 49 modules; 7 module-columns * 4 px = 28 px wide).",
+  "module_rows": 7,
+  "module_cols": 7,
+
+  "_comment_snake": "How module IDs are assigned across the module grid. 'start' is the corner ID 1 sits in. 'primary_axis' is the direction IDs increment first (before snaking). 'serpentine' means every other line reverses direction.",
+  "snake": {
+    "start": "top_left",
+    "primary_axis": "vertical",
+    "serpentine": true
+  },
+
+  "_comment_pixel_order": "Within a single module, which physical pixel is pixel index 0. All modules are mounted identically, so pixel 0 is always the physically left-most pixel and pixel 3 the right-most, regardless of the snake direction at that module.",
+  "pixel_order": "left_to_right",
+
+  "first_module_id": 1
+}

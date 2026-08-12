@@ -1,0 +1,9 @@
+# Core SDK (real hardware + sim)
+numpy>=1.24
+pyserial>=3.5
+pygame>=2.5
+
+# For the video example (examples/play_video.py) only:
+opencv-python>=4.8
+# Audio in the video example uses ffplay from ffmpeg — install ffmpeg
+# separately and ensure `ffplay` is on your PATH.
