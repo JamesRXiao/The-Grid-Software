@@ -24,6 +24,7 @@ cd the-grid
 pip install -r requirements.txt
 
 cp config.example.py config.py      # then edit config.py (set your COM port)
+#^^ ONLY REQUIRED FOR ACTUAL FLOOR devs dont do this
 
 # Try an example in the simulator (click/drag tiles to "step" on them):
 python run_sim.py examples/press_color.py
