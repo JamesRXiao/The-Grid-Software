@@ -73,46 +73,46 @@ class GridController:
 
         # --- lifecycle ------------------------------------------------------
         self._stop_evt = threading.Event()
+        # Set by the TX thread once the port is open; cleared on disconnect.
+        # The RX thread waits on this before reading, so it never races to open
+        # the port or reads from a None/closed serial object.
+        self._port_ready = threading.Event()
         self._ser: serial.Serial | None = None
         self._tx_thread: threading.Thread | None = None
         self._rx_thread: threading.Thread | None = None
 
     # --------------------------------------------------------------- serial
     def _open_serial(self) -> None:
-        """Open (or reopen) the serial port. Retries while reconnect is on and
-        we have not been asked to stop."""
+        """Open (or reopen) the serial port. Only ever called by the TX thread —
+        the TX thread is the sole owner of the port's lifecycle. Retries until
+        successful or stop() is called, then signals _port_ready so the RX
+        thread knows it is safe to start reading."""
         while not self._stop_evt.is_set():
             try:
                 self._ser = serial.Serial(self.port, self.baudrate, timeout=0.02)
                 print(f"[GridController] connected on {self.port}")
+                self._port_ready.set()   # unblock the RX thread
                 return
             except (serial.SerialException, OSError) as e:
                 if not self.reconnect:
                     raise
                 print(f"[GridController] open failed ({e}); retrying in 1s...")
-                # Wait, but stay responsive to stop().
                 self._stop_evt.wait(1.0)
-
-    def _ensure_serial(self) -> bool:
-        """Return True if we have a usable, open port; try to (re)open otherwise.
-        Returns False only if we are stopping."""
-        if self._ser is not None and self._ser.is_open:
-            return True
-        self._open_serial()
-        return self._ser is not None and self._ser.is_open
 
     # ------------------------------------------------------------ tx thread
     def _tx_loop(self) -> None:
+        """The TX thread owns the serial port — it opens it, sends frames, and
+        if the port drops it closes it, clears _port_ready (pausing the RX
+        thread), and reconnects. The RX thread never calls open/close itself,
+        so there is never a race to open the same port twice."""
         interval = 1.0 / self.fps
+        self._open_serial()   # open once before entering the loop
+
         while not self._stop_evt.is_set():
             loop_start = time.perf_counter()
 
-            if not self._ensure_serial():
-                break  # stopping
-
-            # Snapshot the frame under the lock, then do the (slower)
-            # serialisation + write outside the lock so we never block the game
-            # thread for long.
+            # Snapshot the frame under the lock, then serialise + write outside
+            # the lock so we never block the game thread for long.
             with self._lock:
                 frame_copy = self._frame.copy()
 
@@ -121,11 +121,12 @@ class GridController:
             try:
                 self._ser.write(wire)
             except (serial.SerialException, OSError) as e:
-                print(f"[GridController] write failed ({e}); will reconnect")
+                print(f"[GridController] write failed ({e}); reconnecting...")
+                self._port_ready.clear()   # tell RX thread: port is gone
                 self._close_port_quietly()
-                continue  # loop back, _ensure_serial will reopen
+                self._open_serial()        # TX thread reconnects exclusively
+                continue
 
-            # Pace to the advisory FPS. Sleep in small slices so stop() is snappy.
             elapsed = time.perf_counter() - loop_start
             remaining = interval - elapsed
             if remaining > 0:
@@ -135,32 +136,37 @@ class GridController:
     def _rx_loop(self) -> None:
         """Parse 2-byte [node_id, switch_bits] replies from the stream.
 
-        Robust framing: rather than assuming reads land on packet boundaries
-        (USB-CDC may batch or split them), we accumulate bytes and validate
-        candidate packets. A packet is [node_id, bits] where node_id is in the
-        valid module-id range and bits has no illegal high nibble set. If the
-        lead byte isn't a plausible node_id we drop exactly one byte and resync,
-        rather than deleting from the front of a growing bytearray each time.
+        The RX thread shares self._ser with the TX thread but never opens or
+        closes it. _port_ready gates reading so this thread never touches a
+        None or closed port. When the port drops, the TX thread clears
+        _port_ready and this thread waits here until it's reconnected.
+
+        Framing: bytes are accumulated into a deque (O(1) popleft). Each
+        candidate packet is validated — plausible node_id in range, zero high
+        nibble on the switch byte. On a bad lead byte we drop one byte and
+        resync, rather than deleting from the front of a bytearray each time.
         """
         from collections import deque
 
         valid_ids = set(self.layout.module_ids())
-        # Upper 4 bits of the switch byte must be zero (only 4 switches/module).
-        HIGH_NIBBLE = 0xF0
-
-        rx = deque()  # bytes waiting to be parsed; O(1) popleft
-        # Adaptive read size: ask for a modest chunk; timeout keeps us responsive.
+        HIGH_NIBBLE = 0xF0   # upper 4 bits must be zero (only 4 switches/module)
         READ_SIZE = 64
 
+        rx: deque = deque()
+
         while not self._stop_evt.is_set():
-            if not self._ensure_serial():
-                break
+            # Block until the TX thread has the port open.
+            if not self._port_ready.wait(timeout=0.1):
+                continue   # timed out — check stop_evt and retry
 
             try:
                 chunk = self._ser.read(READ_SIZE)
             except (serial.SerialException, OSError) as e:
-                print(f"[GridController] read failed ({e}); will reconnect")
-                self._close_port_quietly()
+                # Port dropped; TX thread will detect it on its next write and
+                # reconnect. Clear the event and wait for it to do so.
+                print(f"[GridController] read failed ({e}); waiting for reconnect")
+                self._port_ready.clear()
+                rx.clear()
                 continue
 
             if chunk:
@@ -169,15 +175,14 @@ class GridController:
             # Parse as many whole, plausible packets as we can.
             while len(rx) >= 2:
                 node_id = rx[0]
-                bits = rx[1]
+                bits    = rx[1]
 
-                # Validate the candidate packet.
                 if node_id in valid_ids and (bits & HIGH_NIBBLE) == 0:
-                    rx.popleft()  # consume node_id
-                    rx.popleft()  # consume bits
+                    rx.popleft()   # consume node_id
+                    rx.popleft()   # consume bits
                     self._apply_switch(node_id, bits)
                 else:
-                    # Misaligned: drop one byte and try to resync on the next.
+                    # Misaligned — drop one byte and resync.
                     rx.popleft()
 
     def _apply_switch(self, module_id: int, bits: int) -> None:
@@ -204,6 +209,7 @@ class GridController:
 
     def start(self) -> None:
         self._stop_evt.clear()
+        self._port_ready.clear()   # TX thread will set this once port is open
         self._tx_thread = threading.Thread(target=self._tx_loop, name="grid-tx", daemon=True)
         self._rx_thread = threading.Thread(target=self._rx_loop, name="grid-rx", daemon=True)
         self._tx_thread.start()
