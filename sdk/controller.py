@@ -132,57 +132,65 @@ class GridController:
             if remaining > 0:
                 self._stop_evt.wait(remaining)
 
+    def _clear_module(self, module_id: int) -> None:
+        """Set all switches for a module to unpressed. Called when a module
+        goes silent — firmware only transmits when something is pressed."""
+        with self._lock:
+            for (r, c) in self.layout.coords_for_module(module_id):
+                self._switch_grid[r, c] = False
+
     # ------------------------------------------------------------ rx thread
     def _rx_loop(self) -> None:
-        """Parse 2-byte [node_id, switch_bits] replies from the stream.
-
-        The RX thread shares self._ser with the TX thread but never opens or
-        closes it. _port_ready gates reading so this thread never touches a
-        None or closed port. When the port drops, the TX thread clears
-        _port_ready and this thread waits here until it's reconnected.
-
-        Framing: bytes are accumulated into a deque (O(1) popleft). Each
-        candidate packet is validated — plausible node_id in range, zero high
-        nibble on the switch byte. On a bad lead byte we drop one byte and
-        resync, rather than deleting from the front of a bytearray each time.
-        """
         from collections import deque
+        import time
 
         valid_ids = set(self.layout.module_ids())
-        HIGH_NIBBLE = 0xF0   # upper 4 bits must be zero (only 4 switches/module)
+        HIGH_NIBBLE = 0xF0
         READ_SIZE = 64
 
         rx: deque = deque()
 
+        # Track when we last heard from each module (seconds, perf_counter).
+        # If a module goes silent for longer than SILENCE_TIMEOUT, its switches
+        # are assumed released — handles the case where firmware only transmits
+        # when something is pressed.
+        SILENCE_TIMEOUT = 0.033   # 100ms — safely longer than one cycle (~26ms)
+        last_seen: dict[int, float] = {}
+
         while not self._stop_evt.is_set():
-            # Block until the TX thread has the port open.
             if not self._port_ready.wait(timeout=0.1):
-                continue   # timed out — check stop_evt and retry
+                continue
+
+            now = time.perf_counter()
+
+            # Clear any module that has gone quiet for longer than the timeout.
+            for module_id in list(last_seen.keys()):
+                if now - last_seen[module_id] > SILENCE_TIMEOUT:
+                    self._clear_module(module_id)
+                    del last_seen[module_id]
 
             try:
                 chunk = self._ser.read(READ_SIZE)
             except (serial.SerialException, OSError) as e:
-                # Port dropped; TX thread will detect it on its next write and
-                # reconnect. Clear the event and wait for it to do so.
                 print(f"[GridController] read failed ({e}); waiting for reconnect")
                 self._port_ready.clear()
                 rx.clear()
+                last_seen.clear()
                 continue
 
             if chunk:
                 rx.extend(chunk)
 
-            # Parse as many whole, plausible packets as we can.
             while len(rx) >= 2:
                 node_id = rx[0]
                 bits    = rx[1]
 
                 if node_id in valid_ids and (bits & HIGH_NIBBLE) == 0:
-                    rx.popleft()   # consume node_id
-                    rx.popleft()   # consume bits
+                    rx.popleft()
+                    rx.popleft()
+                    last_seen[node_id] = time.perf_counter()
                     self._apply_switch(node_id, bits)
                 else:
-                    # Misaligned — drop one byte and resync.
                     rx.popleft()
 
     def _apply_switch(self, module_id: int, bits: int) -> None:
