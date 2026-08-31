@@ -43,7 +43,7 @@ class MyGame(Game):
 
     def setup(self, client):
         """Runs once before the first frame. Set up your state here."""
-        self.sim_testing = True
+        self.sim_testing = False
 
         self.rows = client.rows
         self.cols = client.cols
@@ -80,7 +80,7 @@ class MyGame(Game):
         self.ball_cycle = 5
         self.ball_h = 0
         # velocity is in pixels/second (vy, vx)
-        self.ball_velocity = [random.choice([-1, 1]) * 3, random.choice([-1, 1]) * 6]
+        self.ball_velocity = [random.choice([-1, 1]) * 5, random.choice([-1, 1]) * 10]
 
         self.p1_count = {
             3: [(-1, 0), (-1, 2), (-1, 4), (0, 0), (0, 2), (0, 4), (1, 0), (1, 1), (1, 2), (1, 3), (1, 4)],
