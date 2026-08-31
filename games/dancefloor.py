@@ -36,18 +36,21 @@ class MyGame(Game):
         self.rows = client.rows
         self.cols = client.cols
         rainbow = [(0, 97, 89), (33, 100, 100), (56, 100, 100), (138, 100, 50), (222, 100, 100), (290, 52, 51)]
-        lesbian = [(13, 100, 84), (24, 86, 94), (24, 100, 100), (0, 0, 50), (324, 55, 82), (323, 39, 71), (324, 98, 64)]
+        lesbian = [(13, 100, 84), (24, 86, 94), (24, 100, 100), (0, 0, 75), (324, 55, 82), (323, 39, 71), (324, 98, 64)]
         bisexual = [(329, 98, 84), (304, 32, 61), (220, 100, 66)]
-        self.schemes = [rainbow, lesbian, bisexual]
+        transgender = [(197, 94, 98), (348, 79, 96), (0, 0, 75)]
+        nonbinary = [(58, 97, 99), (0, 0, 75), (274, 57, 82), (0, 0, 17)]
         self.schemes = [
             {'colors': rainbow, 'switch': 'lerp', 'pattern': 'cycle'},
             {'colors': lesbian, 'switch': 'lerp', 'pattern': 'oscillate'},
-            {'colors': bisexual, 'switch': 'lerp', 'pattern': 'oscillate'}
+            {'colors': bisexual, 'switch': 'lerp', 'pattern': 'oscillate'},
+            {'colors': transgender, 'switch': 'lerp', 'pattern': 'oscillate'},
+            {'colors': nonbinary, 'switch': 'lerp', 'pattern': 'cycle'}
         ]
-        self.scheme_index = 1
+        self.scheme_index = -1
         self.cur_scheme = self.schemes[self.scheme_index]
 
-        self.mode = 1
+        self.mode = -1
         self.total_modes = 4
 
         self.color_timer = 0
@@ -255,6 +258,7 @@ class MyGame(Game):
         self.cur_scheme = self.schemes[self.scheme_index]
 
         self.mode = (self.mode + 1) % self.total_modes
+        print(f"scheme: {self.scheme_index} | mode: {self.mode}")
 
         self.press_timers.clear()
         self.pixel_lightness.clear()
