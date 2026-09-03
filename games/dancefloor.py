@@ -55,7 +55,7 @@ class MyGame(Game):
 
         self.color_timer = 0
         self.color_dur = 5 # time to transition between colors
-        self.total_dur = 60 # how long
+        self.total_dur = 30 # how long
 
         # radial mode variables
         self.press_timers = {} # (r, c) -> time

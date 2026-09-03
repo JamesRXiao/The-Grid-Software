@@ -154,7 +154,7 @@ class GridController:
         # If a module goes silent for longer than SILENCE_TIMEOUT, its switches
         # are assumed released — handles the case where firmware only transmits
         # when something is pressed.
-        SILENCE_TIMEOUT = 0.033   # 100ms — safely longer than one cycle (~26ms)
+        SILENCE_TIMEOUT = 0.099
         last_seen: dict[int, float] = {}
 
         while not self._stop_evt.is_set():

@@ -91,7 +91,7 @@ class MyGame(Game):
                         h_avg += self.h[x2][y2]
                 h_avg /= (scale*scale)
 
-                brightness = 255 * (1 / (1 + math.exp(-(h_avg - 0.1)*25)))
+                brightness = 255 * (1 / (1 + math.exp(-(h_avg - 0.1)*55)))
                 client.set_pixel(x, y, (brightness, brightness, brightness))
 
         # --- Handy things you can do ----------------------------------------
